@@ -25,6 +25,10 @@ export function createRepository(db) {
         VALUES (?,?,?,?,?,?,?)`).run(applicationId,actorId,action,fromStatus,toStatus,reason,causeHistoryId);
       return Number(r.lastInsertRowid);
     },
+    // [학생 추가] 자동 승급 대상: 같은 행사 PENDING 중 created_at ASC, id ASC 첫 1건.
+    nextPending(eventId) { return db.prepare(selection+" WHERE a.event_id=? AND a.status='PENDING' ORDER BY a.created_at ASC, a.id ASC LIMIT 1").get(eventId); },
+    // [학생 추가] 조건부 상태 변경: 현재 상태가 from일 때만 to로 바꾸고, 바뀐 행 수(0 또는 1)를 반환합니다.
+    changeStatus(id,from,to) { return Number(db.prepare("UPDATE applications SET status=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=? AND status=?").run(to,id,from).changes); },
     setStatus(id,status) { db.prepare("UPDATE applications SET status=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?").run(status,id); return this.application(id); }
   };
 }

@@ -98,11 +98,57 @@ npm run db:reset
 - `tests/`: 기반·필수·선택 심화 테스트
 - `docs/API.md`: 상태·이력·입출력 계약
 
-## 제출 전 작성할 내용
+## 구현 결과
 
-이 부분을 본인의 서비스 소개, 변경 파일, 구현 완료 여부, 실행 환경, 알려진 문제, 보고서·검증 증거 링크와 AI 사용 요약으로 바꾸세요. GitHub URL·커밋 SHA를 LMS에 제출하고 보고서 PDF를 저장소 `docs/report.pdf`와 LMS에 같은 버전으로 첨부합니다.
+### 실행 환경
 
-`node_modules`, 생성 DB·서명 키, 실제 `.env`·JWT와 개인 정보는 제출하지 않습니다. 제공 코드와 직접 구현한 부분을 구분합니다.
+- Node.js v24.18.0, npm, Windows 11
+- 별도 DB 서버 없음 (Node 내장 `node:sqlite`)
+
+### 변경 파일 (제공 코드와 구분)
+
+|파일|구분|내용|
+|---|---|---|
+|`src/application-service.js`|직접 구현|TODO-01~04 (`apply`, `cancel`, `approve`, `revoke`)와 `transaction()` 헬퍼|
+|`src/repository.js`|함수 2개 추가|`nextPending(eventId)` 대기자 선택 SQL, `changeStatus(id,from,to)` 조건부 상태 변경 SQL|
+|`README.md`|작성|이 절|
+
+그 외 파일(`app.js`, `auth.js`, `db.js`, `public/`, `tests/` 등)은 제공 코드 그대로이며 테스트 기대값은 변경하지 않았습니다.
+
+### 구현 완료 여부
+
+|항목|결과|
+|---|---|
+|`npm test` (기반 4건)|4/4 통과|
+|`npm run test:assignment` (T01~T32)|32/32 통과|
+|`npm run test:advanced` (선택 심화, 20회)|통과|
+|화면 검증 U01~U05|보고서에 화면 증거 첨부|
+
+### 핵심 설계
+
+- **트랜잭션 경계**: 모든 변경 요청은 `transaction(work)` 안에서 실행됩니다. `BEGIN IMMEDIATE`로 시작해 존재·권한·상태·정원 검사와 저장을 모두 수행하고, 정상 반환 시 `COMMIT`, 업무 거부(AppError)나 저장 오류가 발생하면 `ROLLBACK`합니다.
+- **승인 취소**: REVOKED 변경 → REVOKE 이력 → 대기자 1명 선택 → APPROVED 변경 → AUTO_APPROVE 이력(`cause_history_id` = REVOKE 이력 ID)이 하나의 트랜잭션입니다. AUTO_APPROVE 이력 저장이 실패하면 네 저장이 모두 취소됩니다(T29).
+- **대기 순서**: `SELECT ... WHERE a.event_id=? AND a.status='PENDING' ORDER BY a.created_at ASC, a.id ASC LIMIT 1`. 시각이 같으면 ID로 순서를 고정합니다.
+- **최신 상태 검사**: 매 요청마다 트랜잭션 안에서 DB를 다시 읽고, `UPDATE ... WHERE id=? AND status=?` 조건부 변경이 1행이 아니면 409로 거부합니다.
+- **동시성(선택 심화)**: `BEGIN IMMEDIATE`는 트랜잭션 시작 시 SQLite 쓰기 잠금을 획득하므로 다른 서버 프로세스가 정원 검사와 승인 사이에 끼어들 수 없습니다. 대기 중인 쪽은 `busy_timeout=5000` 동안 기다린 후 최신 승인 인원으로 다시 판단합니다. 한계: SQLite 단일 파일 기준의 보호이며 5초를 넘는 잠금 대기는 500이 될 수 있고, 20회 반복 성공이 모든 경쟁 상황의 부재를 증명하지는 않습니다.
+
+### 알려진 문제
+
+- 없음 (필수 범위 기준). 반려·재신청·알림·신청 마감은 과제 범위 외입니다.
+
+### 보고서·증거
+
+- 보고서: `docs/report.pdf`
+- 검증 증거: `docs/evidence/`
+
+### AI 사용
+
+- 사용 도구: Claude Code
+- 적용 위치: `src/application-service.js` 전체, `src/repository.js`의 `nextPending`, `changeStatus`
+- 직접 검증: `npm test`, `npm run test:assignment`, `npm run test:advanced` 실행 결과 확인, 화면 U01~U05 직접 수행
+- 참고 자료: `docs/API.md`, 11주차 강의자료(비즈니스 로직과 서비스 규칙), [Node.js SQLite](https://nodejs.org/docs/latest-v24.x/api/sqlite.html), [SQLite BEGIN IMMEDIATE](https://www.sqlite.org/lang_transaction.html)
+
+`node_modules`, 생성 DB·서명 키(`data/`), 실제 `.env`·JWT와 개인 정보는 제출하지 않습니다(`.gitignore` 적용).
 
 ## 참고 문서
 
