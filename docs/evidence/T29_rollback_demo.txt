@@ -1,0 +1,31 @@
+TEST_INJECTED_FAILURE
+--- 요청 전: alice APPROVED, bob PENDING ---
+applications: #1(user 1) APPROVED | #2(user 2) PENDING
+application_history:
+  #1 app=1 actor=1 APPLY null→PENDING reason=null cause=null
+  #2 app=1 actor=3 APPROVE PENDING→APPROVED reason=null cause=null
+  #3 app=2 actor=2 APPLY null→PENDING reason=null cause=null
+approvedCount(event 1) = 1
+
+> 트리거 설치: AUTO_APPROVE 이력 INSERT 시 RAISE(ABORT)
+> POST /api/applications/1/revoke → HTTP 500 {"code":"INTERNAL_ERROR","message":"서버에서 처리하지 못했습니다."}
+--- 실패 직후 ---
+applications: #1(user 1) APPROVED | #2(user 2) PENDING
+application_history:
+  #1 app=1 actor=1 APPLY null→PENDING reason=null cause=null
+  #2 app=1 actor=3 APPROVE PENDING→APPROVED reason=null cause=null
+  #3 app=2 actor=2 APPLY null→PENDING reason=null cause=null
+approvedCount(event 1) = 1
+요청 전 테이블 == 실패 직후 테이블 (updated_at 포함 전체 행 비교): true
+
+> 트리거 제거 후 같은 요청 재시도
+> HTTP 200 revoked=#1 REVOKED, promoted=#2 APPROVED
+--- 재시도 성공 후 ---
+applications: #1(user 1) REVOKED | #2(user 2) APPROVED
+application_history:
+  #1 app=1 actor=1 APPLY null→PENDING reason=null cause=null
+  #2 app=1 actor=3 APPROVE PENDING→APPROVED reason=null cause=null
+  #3 app=2 actor=2 APPLY null→PENDING reason=null cause=null
+  #4 app=1 actor=3 REVOKE APPROVED→REVOKED reason=운영 사정으로 승인 취소 cause=null
+  #5 app=2 actor=3 AUTO_APPROVE PENDING→APPROVED reason=null cause=4
+approvedCount(event 1) = 1
